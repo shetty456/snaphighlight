@@ -9,98 +9,80 @@ import { useOCR } from '@/hooks/useOCR';
 import { useCanvasExport } from '@/hooks/useCanvasExport';
 import { computeScale, toOriginalCoords } from '@/lib/scaleCoords';
 import OCRLoader from './OCRLoader';
-import Toolbar from './Toolbar';
+import Toolbar, { type ActiveTool } from './Toolbar';
 import Toast from './Toast';
 import type { TextWord, HighlightColor } from '@/types';
 
-const HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
+// #2c2c2c instead of pure black — dark but softer for redaction
+const FILL: Record<HighlightColor, string> = {
   yellow: '#FFE500',
   green:  '#BEFF40',
   cyan:   '#40E8FF',
   pink:   '#FFB0D4',
-  black:  '#000000',
+  black:  '#2c2c2c',
+};
+
+// Ghost preview fills — 35% opacity version of each colour
+const GHOST_FILL: Record<HighlightColor, string> = {
+  yellow: 'rgba(255,229,0,0.35)',
+  green:  'rgba(190,255,64,0.40)',
+  cyan:   'rgba(64,232,255,0.40)',
+  pink:   'rgba(255,176,212,0.45)',
+  black:  'rgba(44,44,44,0.50)',
 };
 
 const MAX_W = 900;
 const MAX_H = 660;
+// Uniform padding applied to ALL mark types so heights look consistent
+const PAD = 2;
 
-// Find the word at a given point in display coords
-function wordAtPoint(words: TextWord[], px: number, py: number, scale: number): TextWord | undefined {
-  const ox = px / scale;
-  const oy = py / scale;
-  // 3px slop so small words are still easy to click
-  return words.find(
-    (w) => ox >= w.bbox.x0 - 3 && ox <= w.bbox.x1 + 3 && oy >= w.bbox.y0 - 3 && oy <= w.bbox.y1 + 3
-  );
+function wordAtPoint(words: TextWord[], px: number, py: number, scale: number) {
+  const ox = px / scale, oy = py / scale;
+  return words.find(w => ox >= w.bbox.x0 - 3 && ox <= w.bbox.x1 + 3 && oy >= w.bbox.y0 - 3 && oy <= w.bbox.y1 + 3);
 }
 
-// Find all words whose bbox overlaps the given rect in display coords
-function wordsInRect(words: TextWord[], rx: number, ry: number, rw: number, rh: number, scale: number): TextWord[] {
+function wordsInRect(words: TextWord[], rx: number, ry: number, rw: number, rh: number, scale: number) {
   const ox = rx / scale, oy = ry / scale, ow = rw / scale, oh = rh / scale;
-  return words.filter(
-    (w) => w.bbox.x0 < ox + ow && w.bbox.x1 > ox && w.bbox.y0 < oy + oh && w.bbox.y1 > oy
-  );
+  return words.filter(w => w.bbox.x0 < ox + ow && w.bbox.x1 > ox && w.bbox.y0 < oy + oh && w.bbox.y1 > oy);
 }
 
-interface MergedRect {
-  key: string;
-  x: number; y: number; width: number; height: number;
-  color: HighlightColor;
-}
+interface MergedRect { key: string; x: number; y: number; width: number; height: number; color: HighlightColor }
 
-// Group highlighted words by line, sort left-to-right within each line,
-// then merge consecutive words into single rects.
-// Adjacent words are merged when the gap between them is smaller than
-// half the average word height (a typical inter-word space is ~0.25× height).
-function buildMergedRects(
-  highlightedWordIds: Set<string>,
-  colorOf: Map<string, HighlightColor>,
-  words: TextWord[],
-  scale: number
-): MergedRect[] {
-  // Group highlighted words by lineId
+function buildMergedRects(ids: Set<string>, colorOf: Map<string, HighlightColor>, words: TextWord[], scale: number): MergedRect[] {
   const byLine = new Map<string, TextWord[]>();
   for (const w of words) {
-    if (!highlightedWordIds.has(w.id)) continue;
+    if (!ids.has(w.id)) continue;
     if (!byLine.has(w.lineId)) byLine.set(w.lineId, []);
     byLine.get(w.lineId)!.push(w);
   }
-
   const rects: MergedRect[] = [];
-
-  for (const [lineId, lineWords] of byLine) {
-    lineWords.sort((a, b) => a.bbox.x0 - b.bbox.x0);
-
-    const avgH = lineWords.reduce((s, w) => s + (w.bbox.y1 - w.bbox.y0), 0) / lineWords.length;
-    const GAP = avgH * 0.8; // merge if inter-word gap < 80% of text height (covers normal spaces)
-
+  for (const [lineId, lw] of byLine) {
+    lw.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+    const avgH = lw.reduce((s, w) => s + (w.bbox.y1 - w.bbox.y0), 0) / lw.length;
+    const GAP = avgH * 0.8;
     let i = 0;
-    while (i < lineWords.length) {
+    while (i < lw.length) {
       let j = i;
-      while (j + 1 < lineWords.length && lineWords[j + 1].bbox.x0 - lineWords[j].bbox.x1 < GAP) {
-        j++;
-      }
-      const run = lineWords.slice(i, j + 1);
+      while (j + 1 < lw.length && lw[j + 1].bbox.x0 - lw[j].bbox.x1 < GAP) j++;
+      const run = lw.slice(i, j + 1);
+      const y0 = Math.min(...run.map(w => w.bbox.y0));
+      const y1 = Math.max(...run.map(w => w.bbox.y1));
       rects.push({
         key: `${lineId}-${i}`,
-        x: (run[0].bbox.x0 - 1) * scale,
-        y: (Math.min(...run.map((w) => w.bbox.y0)) - 1) * scale,
-        width: (run[j].bbox.x1 - run[0].bbox.x0 + 2) * scale,
-        height: (Math.max(...run.map((w) => w.bbox.y1)) - Math.min(...run.map((w) => w.bbox.y0)) + 2) * scale,
+        // Uniform PAD on all sides — same for highlights and redactions
+        x: (run[0].bbox.x0 - PAD) * scale,
+        y: (y0 - PAD) * scale,
+        width:  (run[j].bbox.x1 - run[0].bbox.x0 + PAD * 2) * scale,
+        height: (y1 - y0 + PAD * 2) * scale,
         color: colorOf.get(run[0].id) ?? 'yellow',
       });
       i = j + 1;
     }
   }
-
   return rects;
 }
 
-interface Props {
-  imageDataURL: string;
-  origW: number;
-  origH: number;
-}
+interface Props { imageDataURL: string; origW: number; origH: number }
 
 export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
   const scale = computeScale({ origW, origH, displayW: MAX_W, displayH: MAX_H });
@@ -110,13 +92,15 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
   const stageRef = useRef<Konva.Stage | null>(null);
   const [htmlImage, setHtmlImage] = useState<HTMLImageElement | null>(null);
   const [hoverWord, setHoverWord] = useState<TextWord | null>(null);
+  const [cursorStyle, setCursorStyle] = useState<string>('default');
+  const [activeTool, setActiveTool] = useState<ActiveTool>('yellow');
 
   const isDragging = useRef(false);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const [dragRect, setDragRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
   const { words, status, progress, recognize } = useOCR();
-  const { highlights, activeColor, setActiveColor, toggleWord, highlightWords, undo, clear, canUndo } = useHighlights();
+  const { highlights, activeColor, setActiveColor, toggleWord, highlightWords, eraseWords, undo, clear, canUndo } = useHighlights();
   const { exportPNG, exported } = useCanvasExport();
 
   useEffect(() => {
@@ -126,6 +110,16 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
     recognize(imageDataURL);
   }, [imageDataURL, recognize]);
 
+  // Keep activeTool and activeColor in sync
+  const handleToolChange = useCallback((tool: ActiveTool) => {
+    setActiveTool(tool);
+    if (tool !== 'erase') setActiveColor(tool as HighlightColor);
+  }, [setActiveColor]);
+
+  const isErase = activeTool === 'erase';
+  const highlightedIds = new Set(highlights.map(h => h.wordId));
+  const colorOf = new Map(highlights.map(h => [h.wordId, h.color]));
+
   const onMouseDown = useCallback((_e: KonvaEventObject<MouseEvent>) => {
     const pos = stageRef.current?.getPointerPosition();
     if (!pos) return;
@@ -134,25 +128,25 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
     setDragRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
   }, []);
 
-  const [cursorStyle, setCursorStyle] = useState<'text' | 'default' | 'crosshair'>('default');
-
   const onMouseMove = useCallback((_e: KonvaEventObject<MouseEvent>) => {
     const pos = stageRef.current?.getPointerPosition();
     if (!pos) return;
     if (!isDragging.current || !dragStart.current) {
       const w = wordAtPoint(words, pos.x, pos.y, scale);
       setHoverWord(w ?? null);
-      setCursorStyle(w ? 'text' : 'default');
+      if (isErase) {
+        setCursorStyle(w && highlightedIds.has(w.id) ? 'pointer' : 'default');
+      } else {
+        setCursorStyle(w ? 'text' : 'default');
+      }
       return;
     }
     const { x: sx, y: sy } = dragStart.current;
-    setDragRect({
-      x: Math.min(sx, pos.x), y: Math.min(sy, pos.y),
-      width: Math.abs(pos.x - sx), height: Math.abs(pos.y - sy),
-    });
+    setDragRect({ x: Math.min(sx, pos.x), y: Math.min(sy, pos.y), width: Math.abs(pos.x - sx), height: Math.abs(pos.y - sy) });
     setHoverWord(null);
     setCursorStyle('crosshair');
-  }, [words, scale]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [words, scale, isErase, highlightedIds]);
 
   const onMouseUp = useCallback((_e: KonvaEventObject<MouseEvent>) => {
     if (!isDragging.current) return;
@@ -160,33 +154,44 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
     const pos = stageRef.current?.getPointerPosition();
     const wasDrag = dragRect && (dragRect.width > 6 || dragRect.height > 6);
 
-    if (wasDrag && dragRect) {
-      const hit = wordsInRect(words, dragRect.x, dragRect.y, dragRect.width, dragRect.height, scale);
-      if (hit.length) highlightWords(hit, activeColor);
-    } else if (pos) {
-      const hit = wordAtPoint(words, pos.x, pos.y, scale);
-      if (hit) toggleWord(hit, activeColor);
+    if (isErase) {
+      const targets = wasDrag && dragRect
+        ? wordsInRect(words, dragRect.x, dragRect.y, dragRect.width, dragRect.height, scale)
+        : pos ? [wordAtPoint(words, pos.x, pos.y, scale)].filter(Boolean) as TextWord[] : [];
+      if (targets.length) eraseWords(targets);
+    } else {
+      if (wasDrag && dragRect) {
+        const hit = wordsInRect(words, dragRect.x, dragRect.y, dragRect.width, dragRect.height, scale);
+        if (hit.length) highlightWords(hit, activeColor);
+      } else if (pos) {
+        const hit = wordAtPoint(words, pos.x, pos.y, scale);
+        if (hit) toggleWord(hit, activeColor);
+      }
     }
     dragStart.current = null;
     setDragRect(null);
     setCursorStyle('default');
-  }, [dragRect, words, scale, highlightWords, toggleWord, activeColor]);
+  }, [dragRect, words, scale, isErase, eraseWords, highlightWords, toggleWord, activeColor]);
 
-  // Build render data
-  const highlightedIds = new Set(highlights.map((h) => h.wordId));
-  const colorOf = new Map(highlights.map((h) => [h.wordId, h.color]));
   const mergedRects = buildMergedRects(highlightedIds, colorOf, words, scale);
 
-  // Ghost words during drag
-  const ghostWords = dragRect
+  // Words to show ghost preview for
+  const ghostWords: TextWord[] = dragRect
     ? wordsInRect(words, dragRect.x, dragRect.y, dragRect.width, dragRect.height, scale)
     : hoverWord ? [hoverWord] : [];
+
+  // Hint line copy
+  const hint = isErase
+    ? 'Click a highlighted word to remove it · drag to erase a range'
+    : activeColor === 'black'
+    ? 'Click a word to cover it · drag for a range · click again to uncover'
+    : 'Click a word to highlight · drag for a range · click again to remove';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Toolbar
-        activeColor={activeColor}
-        onColorChange={setActiveColor}
+        activeTool={activeTool}
+        onToolChange={handleToolChange}
         onUndo={undo}
         onClear={clear}
         onExport={() => exportPNG(stageRef, origW, displayW)}
@@ -198,20 +203,18 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
       {status === 'loading' && <OCRLoader progress={progress} />}
 
       {status === 'error' && (
-        <div style={{ padding: '8px 16px', fontSize: 12, color: '#e5484d', borderBottom: '1px solid #e8e8e5' }}>
-          Couldn&apos;t detect text — try a clearer screenshot with a light background.
+        <div style={{ padding: '7px 16px', fontSize: 12, color: '#e5484d', borderBottom: '1px solid #e8e8e5' }}>
+          Couldn&apos;t detect text — try a screenshot with a light background and clear text.
         </div>
       )}
 
       {status === 'done' && (
-        <div style={{ padding: '6px 16px', fontSize: 11, color: '#9b9b9b', borderBottom: '1px solid #e8e8e5' }}>
-          {activeColor === 'black'
-            ? 'Redact mode — click a word to cover it · drag for a range · click again to uncover'
-            : 'Click a word to highlight · drag for a range · click again to remove'}
+        <div style={{ padding: '5px 16px', fontSize: 11, color: '#a0a09c', borderBottom: '1px solid #e8e8e5' }}>
+          {hint}
         </div>
       )}
 
-      <div className="flex-1 overflow-auto flex items-center justify-center p-6" style={{ backgroundColor: '#f7f7f5' }}>
+      <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#f7f7f5' }}>
         <Stage
           ref={stageRef}
           width={displayW}
@@ -219,66 +222,68 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
-          style={{
-            cursor: status === 'done' ? cursorStyle : 'default',
-            borderRadius: 10,
-            overflow: 'hidden',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.22)',
-          }}
+          style={{ cursor: status === 'done' ? cursorStyle : 'default', borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.18)' }}
         >
-          {/* Image + confirmed highlights in same layer so multiply blends against image pixels */}
+          {/* Layer 1: image + marks — same layer so multiply composites against image pixels */}
           <Layer>
-            {htmlImage && (
-              <KonvaImage image={htmlImage} width={displayW} height={displayH} listening={false} />
-            )}
-            {mergedRects.map((r) => {
+            {htmlImage && <KonvaImage image={htmlImage} width={displayW} height={displayH} listening={false} />}
+            {mergedRects.map(r => {
               const isRedact = r.color === 'black';
-              // Redact: solid black, source-over, 3px extra padding to ensure full coverage
-              // Highlight: multiply blend so text stays readable through the color
               return (
                 <Rect
                   key={r.key}
-                  x={isRedact ? r.x - 2 : r.x}
-                  y={isRedact ? r.y - 2 : r.y}
-                  width={isRedact ? r.width + 4 : r.width}
-                  height={isRedact ? r.height + 4 : r.height}
-                  fill={HIGHLIGHT_COLORS[r.color]}
+                  x={r.x} y={r.y} width={r.width} height={r.height}
+                  fill={FILL[r.color]}
                   globalCompositeOperation={isRedact ? 'source-over' : 'multiply'}
-                  cornerRadius={isRedact ? 3 : 2}
+                  cornerRadius={3}
                   listening={false}
                 />
               );
             })}
           </Layer>
 
-          {/* Ghost highlights — hover word or drag preview, color matches active tool */}
+          {/* Layer 2: ghost previews */}
           <Layer listening={false}>
-            {ghostWords
-              .filter((w) => !highlightedIds.has(w.id))
-              .map((w) => {
-                const isRedactMode = activeColor === 'black';
+            {ghostWords.map(w => {
+              const isHighlighted = highlightedIds.has(w.id);
+              // Erase mode: show a red removal indicator over highlighted words only
+              if (isErase) {
+                if (!isHighlighted) return null;
                 return (
                   <Rect
                     key={`ghost-${w.id}`}
-                    x={(w.bbox.x0 - (isRedactMode ? 2 : 1)) * scale}
-                    y={(w.bbox.y0 - (isRedactMode ? 2 : 1)) * scale}
-                    width={(w.bbox.x1 - w.bbox.x0 + (isRedactMode ? 4 : 2)) * scale}
-                    height={(w.bbox.y1 - w.bbox.y0 + (isRedactMode ? 4 : 2)) * scale}
-                    fill={isRedactMode ? 'rgba(0,0,0,0.45)' : 'rgba(255,229,0,0.35)'}
-                    stroke={isRedactMode ? 'rgba(0,0,0,0)' : '#FFD700'}
-                    strokeWidth={1}
-                    cornerRadius={isRedactMode ? 3 : 2}
+                    x={(w.bbox.x0 - PAD) * scale} y={(w.bbox.y0 - PAD) * scale}
+                    width={(w.bbox.x1 - w.bbox.x0 + PAD * 2) * scale}
+                    height={(w.bbox.y1 - w.bbox.y0 + PAD * 2) * scale}
+                    fill="rgba(229,72,61,0.25)"
+                    stroke="#e5484d" strokeWidth={1}
+                    cornerRadius={3}
                   />
                 );
-              })}
+              }
+              // Highlight/redact mode: show ghost only on words not yet marked
+              if (isHighlighted) return null;
+              return (
+                <Rect
+                  key={`ghost-${w.id}`}
+                  x={(w.bbox.x0 - PAD) * scale} y={(w.bbox.y0 - PAD) * scale}
+                  width={(w.bbox.x1 - w.bbox.x0 + PAD * 2) * scale}
+                  height={(w.bbox.y1 - w.bbox.y0 + PAD * 2) * scale}
+                  fill={GHOST_FILL[activeColor]}
+                  stroke={activeColor === 'black' ? 'transparent' : 'rgba(0,0,0,0.12)'}
+                  strokeWidth={1}
+                  cornerRadius={3}
+                />
+              );
+            })}
+
+            {/* Drag selection box */}
             {dragRect && (dragRect.width > 6 || dragRect.height > 6) && (
               <Rect
                 x={dragRect.x} y={dragRect.y} width={dragRect.width} height={dragRect.height}
-                fill="rgba(88,204,2,0.07)"
-                stroke="#58CC02"
-                strokeWidth={1}
-                dash={[5, 3]}
-                cornerRadius={2}
+                fill={isErase ? 'rgba(229,72,61,0.06)' : 'rgba(0,0,0,0.04)'}
+                stroke={isErase ? '#e5484d' : '#9b9b9b'}
+                strokeWidth={1} dash={[4, 3]} cornerRadius={2}
               />
             )}
           </Layer>

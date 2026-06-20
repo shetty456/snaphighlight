@@ -41,6 +41,17 @@ export function useHighlights() {
     });
   }, [historyIndex]);
 
+  const eraseWords = useCallback((wordsToErase: TextWord[]) => {
+    setHighlights((cur) => {
+      const ids = new Set(wordsToErase.map((w) => w.id));
+      const next = cur.filter((h) => !ids.has(h.wordId));
+      if (next.length === cur.length) return cur; // nothing changed
+      setHistory((prev) => [...prev.slice(0, historyIndex + 1), next]);
+      setHistoryIndex((i) => i + 1);
+      return next;
+    });
+  }, [historyIndex]);
+
   const undo = useCallback(() => {
     setHistoryIndex((i) => {
       if (i <= 0) return i;
@@ -52,5 +63,5 @@ export function useHighlights() {
 
   const clear = useCallback(() => commit([]), [commit]);
 
-  return { highlights, activeColor, setActiveColor, toggleWord, highlightWords, undo, clear, canUndo: historyIndex > 0 };
+  return { highlights, activeColor, setActiveColor, toggleWord, highlightWords, eraseWords, undo, clear, canUndo: historyIndex > 0 };
 }
