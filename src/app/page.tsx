@@ -1,65 +1,63 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { motion } from 'framer-motion';
+import UploadZone from '@/components/UploadZone';
+import { Highlighter } from 'lucide-react';
+
+const PILLS = [
+  '100% in-browser',
+  'No uploads to server',
+  'OCR-powered snap',
+  'Export as PNG',
+];
+
+export default function HomePage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="min-h-screen flex flex-col items-center justify-center px-5 py-20" style={{ backgroundColor: '#F7F7F7' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 28 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
+        className="w-full max-w-xl flex flex-col items-center gap-8"
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-3">
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center"
+            style={{ backgroundColor: '#58CC02', boxShadow: '0 6px 0 0 #4CAD02' }}
+          >
+            <Highlighter className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black leading-none" style={{ color: '#1A1A1A' }}>
+              SnapHighlight
+            </h1>
+            <p className="text-sm font-semibold mt-0.5" style={{ color: '#777777' }}>
+              Highlight what matters. Export instantly.
+            </p>
+          </div>
+        </div>
+
+        <div className="w-full">
+          <p className="text-center text-base font-bold mb-5" style={{ color: '#1A1A1A' }}>
+            Upload a screenshot. Click the lines you want to highlight. Done.
           </p>
+          <UploadZone />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Feature pills */}
+        <div className="flex flex-wrap justify-center gap-2">
+          {PILLS.map((f) => (
+            <span
+              key={f}
+              className="px-3 py-1.5 text-xs font-bold rounded-full border"
+              style={{ backgroundColor: 'white', borderColor: '#E5E5E5', color: '#777777' }}
+            >
+              {f}
+            </span>
+          ))}
         </div>
-      </main>
-    </div>
+      </motion.div>
+    </main>
   );
 }
