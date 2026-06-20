@@ -5,7 +5,7 @@ export interface TextWord {
   bbox: { x0: number; y0: number; x1: number; y1: number };
 }
 
-export type HighlightColor = 'yellow' | 'green' | 'cyan' | 'pink';
+export type HighlightColor = 'yellow' | 'green' | 'cyan' | 'pink' | 'black';
 
 export interface Highlight {
   id: string;

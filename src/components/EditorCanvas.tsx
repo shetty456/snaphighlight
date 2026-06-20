@@ -18,6 +18,7 @@ const HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
   green:  '#BEFF40',
   cyan:   '#40E8FF',
   pink:   '#FFB0D4',
+  black:  '#000000',
 };
 
 const MAX_W = 900;
@@ -191,19 +192,22 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
         onExport={() => exportPNG(stageRef, origW, displayW)}
         canUndo={canUndo}
         ocrDone={status === 'done'}
+        wordCount={words.length}
       />
 
       {status === 'loading' && <OCRLoader progress={progress} />}
 
       {status === 'error' && (
-        <div style={{ textAlign: 'center', padding: '10px 16px', fontSize: 13, color: '#e5484d', borderBottom: '1px solid #e8e8e5' }}>
-          Couldn&apos;t detect text. Try a clearer screenshot with a light background.
+        <div style={{ padding: '8px 16px', fontSize: 12, color: '#e5484d', borderBottom: '1px solid #e8e8e5' }}>
+          Couldn&apos;t detect text — try a clearer screenshot with a light background.
         </div>
       )}
 
       {status === 'done' && (
-        <div style={{ textAlign: 'center', padding: '7px 16px', fontSize: 12, color: '#9b9b9b', borderBottom: '1px solid #e8e8e5' }}>
-          Click a word to highlight · drag to select a range · click again to remove
+        <div style={{ padding: '6px 16px', fontSize: 11, color: '#9b9b9b', borderBottom: '1px solid #e8e8e5' }}>
+          {activeColor === 'black'
+            ? 'Redact mode — click a word to cover it · drag for a range · click again to uncover'
+            : 'Click a word to highlight · drag for a range · click again to remove'}
         </div>
       )}
 
@@ -227,35 +231,46 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
             {htmlImage && (
               <KonvaImage image={htmlImage} width={displayW} height={displayH} listening={false} />
             )}
-            {mergedRects.map((r) => (
-              <Rect
-                key={r.key}
-                x={r.x} y={r.y} width={r.width} height={r.height}
-                fill={HIGHLIGHT_COLORS[r.color]}
-                globalCompositeOperation="multiply"
-                cornerRadius={2}
-                listening={false}
-              />
-            ))}
+            {mergedRects.map((r) => {
+              const isRedact = r.color === 'black';
+              // Redact: solid black, source-over, 3px extra padding to ensure full coverage
+              // Highlight: multiply blend so text stays readable through the color
+              return (
+                <Rect
+                  key={r.key}
+                  x={isRedact ? r.x - 2 : r.x}
+                  y={isRedact ? r.y - 2 : r.y}
+                  width={isRedact ? r.width + 4 : r.width}
+                  height={isRedact ? r.height + 4 : r.height}
+                  fill={HIGHLIGHT_COLORS[r.color]}
+                  globalCompositeOperation={isRedact ? 'source-over' : 'multiply'}
+                  cornerRadius={isRedact ? 3 : 2}
+                  listening={false}
+                />
+              );
+            })}
           </Layer>
 
-          {/* Ghost highlights — hover word or drag preview */}
+          {/* Ghost highlights — hover word or drag preview, color matches active tool */}
           <Layer listening={false}>
             {ghostWords
               .filter((w) => !highlightedIds.has(w.id))
-              .map((w) => (
-                <Rect
-                  key={`ghost-${w.id}`}
-                  x={(w.bbox.x0 - 1) * scale}
-                  y={(w.bbox.y0 - 1) * scale}
-                  width={(w.bbox.x1 - w.bbox.x0 + 2) * scale}
-                  height={(w.bbox.y1 - w.bbox.y0 + 2) * scale}
-                  fill="rgba(255,229,0,0.35)"
-                  stroke="#FFD700"
-                  strokeWidth={1}
-                  cornerRadius={2}
-                />
-              ))}
+              .map((w) => {
+                const isRedactMode = activeColor === 'black';
+                return (
+                  <Rect
+                    key={`ghost-${w.id}`}
+                    x={(w.bbox.x0 - (isRedactMode ? 2 : 1)) * scale}
+                    y={(w.bbox.y0 - (isRedactMode ? 2 : 1)) * scale}
+                    width={(w.bbox.x1 - w.bbox.x0 + (isRedactMode ? 4 : 2)) * scale}
+                    height={(w.bbox.y1 - w.bbox.y0 + (isRedactMode ? 4 : 2)) * scale}
+                    fill={isRedactMode ? 'rgba(0,0,0,0.45)' : 'rgba(255,229,0,0.35)'}
+                    stroke={isRedactMode ? 'rgba(0,0,0,0)' : '#FFD700'}
+                    strokeWidth={1}
+                    cornerRadius={isRedactMode ? 3 : 2}
+                  />
+                );
+              })}
             {dragRect && (dragRect.width > 6 || dragRect.height > 6) && (
               <Rect
                 x={dragRect.x} y={dragRect.y} width={dragRect.width} height={dragRect.height}
