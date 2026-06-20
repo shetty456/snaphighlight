@@ -182,7 +182,7 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
     : hoverWord ? [hoverWord] : [];
 
   return (
-    <div className="flex flex-col h-full">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Toolbar
         activeColor={activeColor}
         onColorChange={setActiveColor}
@@ -196,18 +196,18 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
       {status === 'loading' && <OCRLoader progress={progress} />}
 
       {status === 'error' && (
-        <div className="text-center py-2 text-sm font-bold" style={{ color: '#FF4B4B' }}>
+        <div style={{ textAlign: 'center', padding: '10px 16px', fontSize: 13, color: '#e5484d', borderBottom: '1px solid #e8e8e5' }}>
           Couldn&apos;t detect text. Try a clearer screenshot with a light background.
         </div>
       )}
 
       {status === 'done' && (
-        <div className="text-center py-2 text-xs font-semibold" style={{ color: '#777' }}>
-          💡 Click a word · drag to select a range
+        <div style={{ textAlign: 'center', padding: '7px 16px', fontSize: 12, color: '#9b9b9b', borderBottom: '1px solid #e8e8e5' }}>
+          Click a word to highlight · drag to select a range · click again to remove
         </div>
       )}
 
-      <div className="flex-1 overflow-auto flex items-center justify-center p-6" style={{ backgroundColor: '#F7F7F7' }}>
+      <div className="flex-1 overflow-auto flex items-center justify-center p-6" style={{ backgroundColor: '#f7f7f5' }}>
         <Stage
           ref={stageRef}
           width={displayW}

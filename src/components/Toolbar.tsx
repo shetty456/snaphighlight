@@ -1,14 +1,12 @@
 'use client';
 
-import { Undo2, Trash2, Download } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { HighlightColor } from '@/types';
 
 const COLORS: { id: HighlightColor; hex: string; label: string }[] = [
-  { id: 'yellow', hex: '#FFC800', label: 'Yellow' },
-  { id: 'green',  hex: '#58CC02', label: 'Green'  },
-  { id: 'cyan',   hex: '#00C9E0', label: 'Cyan'   },
-  { id: 'pink',   hex: '#FF9ECD', label: 'Pink'   },
+  { id: 'yellow', hex: '#FFE500', label: 'Yellow' },
+  { id: 'green',  hex: '#BEFF40', label: 'Green'  },
+  { id: 'cyan',   hex: '#40E8FF', label: 'Cyan'   },
+  { id: 'pink',   hex: '#FFB0D4', label: 'Pink'   },
 ];
 
 interface ToolbarProps {
@@ -21,51 +19,121 @@ interface ToolbarProps {
   ocrDone: boolean;
 }
 
+const btn: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '5px 12px',
+  borderRadius: 6,
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: 'pointer',
+  border: '1px solid #e8e8e5',
+  background: '#ffffff',
+  color: '#1a1a1a',
+  transition: 'background 0.12s',
+  whiteSpace: 'nowrap' as const,
+};
+
 export default function Toolbar({ activeColor, onColorChange, onUndo, onClear, onExport, canUndo, ocrDone }: ToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-3 px-5 py-3 bg-white border-b border-[#E5E5E5] shadow-sm">
-      <div className="flex items-center gap-2">
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '10px 16px',
+      borderBottom: '1px solid #e8e8e5',
+      background: '#ffffff',
+      flexWrap: 'wrap',
+    }}>
+
+      {/* Color swatches */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {COLORS.map(({ id, hex, label }) => (
           <button
             key={id}
             aria-label={label}
-            onClick={() => onColorChange(id)}
             title={label}
-            className={cn(
-              'w-8 h-8 rounded-full border-[3px] transition-all duration-150 active:scale-90',
-              activeColor === id
-                ? 'border-[#1A1A1A] scale-110 shadow-md'
-                : 'border-transparent hover:scale-105 hover:border-[#777]'
-            )}
-            style={{ backgroundColor: hex }}
+            onClick={() => onColorChange(id)}
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              background: hex,
+              border: activeColor === id ? '2px solid #1a1a1a' : '2px solid transparent',
+              cursor: 'pointer',
+              outline: 'none',
+              transition: 'transform 0.1s, border-color 0.1s',
+              transform: activeColor === id ? 'scale(1.2)' : 'scale(1)',
+              boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
+            }}
           />
         ))}
       </div>
 
-      <div className="w-px h-6 bg-[#E5E5E5] mx-1" />
+      {/* Divider */}
+      <div style={{ width: 1, height: 18, background: '#e8e8e5', margin: '0 2px' }} />
 
+      {/* Undo */}
       <button
         onClick={onUndo}
         disabled={!canUndo}
-        className="flex items-center gap-1.5 px-4 h-9 rounded-full text-sm font-bold border-2 border-[#E5E5E5] text-[#1A1A1A] transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#58CC02] hover:text-[#58CC02]"
+        title="Undo"
+        style={{
+          ...btn,
+          opacity: canUndo ? 1 : 0.35,
+          cursor: canUndo ? 'pointer' : 'not-allowed',
+        }}
+        onMouseEnter={e => { if (canUndo) (e.currentTarget as HTMLButtonElement).style.background = '#f7f7f5'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#ffffff'; }}
       >
-        <Undo2 className="w-4 h-4" /> Undo
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 7v6h6" /><path d="M3 13C5.2 7.5 11 4 17 5.3A9 9 0 0 1 21 13" />
+        </svg>
+        Undo
       </button>
 
+      {/* Clear */}
       <button
         onClick={onClear}
-        className="flex items-center gap-1.5 px-4 h-9 rounded-full text-sm font-bold border-2 border-[#FF4B4B]/30 text-[#FF4B4B] transition-all active:scale-95 hover:bg-[#FF4B4B]/10"
+        title="Remove all highlights"
+        style={{ ...btn, color: '#e5484d' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff0f0'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#ffffff'; }}
       >
-        <Trash2 className="w-4 h-4" /> Clear
+        Clear
       </button>
 
+      {/* Export — primary action, pushed right */}
       <button
         onClick={onExport}
         disabled={!ocrDone}
-        className="ml-auto flex items-center gap-2 px-5 h-10 rounded-full bg-[#58CC02] text-white font-extrabold text-sm shadow-[0_4px_0_0_#4CAD02] active:shadow-none active:translate-y-1 transition-[transform,box-shadow] duration-100 hover:bg-[#4CAD02] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+        style={{
+          marginLeft: 'auto',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '5px 14px',
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: ocrDone ? 'pointer' : 'not-allowed',
+          border: 'none',
+          background: ocrDone ? '#1a1a1a' : '#e8e8e5',
+          color: ocrDone ? '#ffffff' : '#9b9b9b',
+          transition: 'background 0.12s',
+        }}
+        onMouseEnter={e => { if (ocrDone) (e.currentTarget as HTMLButtonElement).style.background = '#2d2d2d'; }}
+        onMouseLeave={e => { if (ocrDone) (e.currentTarget as HTMLButtonElement).style.background = '#1a1a1a'; }}
       >
-        <Download className="w-4 h-4" /> Export PNG
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        Export PNG
       </button>
+
     </div>
   );
 }
