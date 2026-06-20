@@ -192,12 +192,13 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
       <Toolbar
         activeTool={activeTool}
         onToolChange={handleToolChange}
+        activeColor={activeColor}
+        onColorChange={(c) => { setActiveColor(c); handleToolChange(c); }}
         onUndo={undo}
         onClear={clear}
         onExport={() => exportPNG(stageRef, origW, displayW)}
         canUndo={canUndo}
         ocrDone={status === 'done'}
-        wordCount={words.length}
       />
 
       {status === 'loading' && <OCRLoader progress={progress} />}
