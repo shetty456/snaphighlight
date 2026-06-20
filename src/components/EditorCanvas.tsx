@@ -210,7 +210,16 @@ export default function EditorCanvas({ imageDataURL, origW, origH }: Props) {
       )}
 
       {status === 'done' && (
-        <div style={{ padding: '5px 16px', fontSize: 11, color: '#a0a09c', borderBottom: '1px solid #e8e8e5' }}>
+        <div style={{
+          padding: '7px 16px', fontSize: 12, color: '#6b6b6b',
+          borderBottom: '1px solid #e8e8e5', background: '#fafafa',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          {/* Coloured left border matches active tool so hint feels contextual */}
+          <span style={{
+            display: 'inline-block', width: 3, height: 14, borderRadius: 2, flexShrink: 0,
+            background: isErase ? '#e5484d' : activeColor === 'black' ? '#2c2c2c' : FILL[activeColor],
+          }} />
           {hint}
         </div>
       )}
